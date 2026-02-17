@@ -7,4 +7,7 @@ export default defineConfig({
 	clean: true,
 	splitting: false,
 	dts: true,
+	banner: {
+		js: "#!/usr/bin/env node",
+	},
 });

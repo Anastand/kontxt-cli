@@ -1,10 +1,10 @@
 {
-	"name": "kontex-cli",
+	"name": "kontxt-cli",
 	"module": "index.ts",
 	"type": "module",
 	"private": true,
 	"bin": {
-		"kontex-cli": "./bin/kontex-cli.ts"
+		"kontxt": "./dist/index.js"
 	},
 	"scripts": {
 		"build": "tsup",
@@ -13,8 +13,7 @@
 		"test": "bun test"
 	},
 	"files": [
-		"dist",
-		"bin"
+		"dist"
 	],
 	"devDependencies": {
 		"@biomejs/biome": "^2.3.15",

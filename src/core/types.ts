@@ -1,7 +1,7 @@
-type TokenType = number & { __brand: "token" };
-type SkipReason = "tooLarge" | "binary" | "excluded";
+export type TokenType = number & { __brand: "token" };
+export type SkipReason = "tooLarge" | "binary" | "excluded";
 
-interface FileType {
+export interface FileType {
 	relativePath: string;
 	absolutePath: string;
 	sizeBytes: number;
