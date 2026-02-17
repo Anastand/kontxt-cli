@@ -20,3 +20,5 @@ type ScanFileResult =
 // done in the same file will cahnge and reorder it later
 
  matches(patterns: string[], path: string): boolean;
+ 
+ 
