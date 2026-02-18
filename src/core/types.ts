@@ -1,7 +1,7 @@
 export type TokenType = number & { __brand: "token" };
 export type SkipReason = "tooLarge" | "binary" | "excluded";
 
-export interface FileType {
+export interface FileEntry {
 	relativePath: string;
 	absolutePath: string;
 	sizeBytes: number;
@@ -9,16 +9,11 @@ export interface FileType {
 	content: string;
 }
 
-type ScanFileResult =
+type ScanResult =
 	| { type: "skipped"; reason: SkipReason }
 	| {
 			type: "file";
-			file: FileType;
+			file: FileEntry;
 	  }
 	| { type: "error"; error: string; path: string };
 
-// done in the same file will cahnge and reorder it later
-
- matches(patterns: string[], path: string): boolean;
- 
- 
