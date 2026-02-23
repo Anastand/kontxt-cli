@@ -1,7 +1,7 @@
+import process from "node:process";
 import { Command } from "commander";
-import process from "process";
-import { getFiles } from "../core/filter.js";
-import { testread } from "../core/filter.js";
+import { getFiles, testread } from "../core/filter.js";
+
 const program = new Command();
 
 program

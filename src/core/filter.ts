@@ -1,7 +1,8 @@
 //  File for filtering through files and checking if we should actually read this file.
-import { globby } from "globby";
+
 import { readFile as readFilefunc } from "node:fs/promises";
 import { join } from "node:path";
+import { globby } from "globby";
 import { getEncoding } from "js-tiktoken";
 
 export async function getFiles(directory: string) {
