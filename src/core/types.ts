@@ -1,6 +1,8 @@
 export type TokenType = number & { __brand: "token" };
 export type SkipReason = "tooLarge" | "binary" | "excluded";
 
+export type TreeNode = { [key: string]: TreeNode | null };
+
 export interface FileEntry {
   relativePath: string;
   absolutePath: string;
