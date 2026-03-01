@@ -41,6 +41,11 @@ export function renderTree(node: TreeNode, prefix: string = ""): string {
   return result;
 }
 
+export function formatTree(paths: string[]): string {
+  const tree = buildTree(paths);
+  return renderTree(tree);
+}
+
 export async function getDirStructure(directory: string) {
   let dirStructure = [] as string[];
   const IGNORE_DIRS = new Set([
@@ -105,11 +110,6 @@ export async function getDirStructure(directory: string) {
     dirStructure.push(relativePath);
   }
   return dirStructure;
-}
-
-export function formatTree(paths: string[]): string {
-  const tree = buildTree(paths);
-  return renderTree(tree);
 }
 
 export function formatContext(files: FileEntry[], tree: string) {
