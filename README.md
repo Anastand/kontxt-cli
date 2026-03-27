@@ -1,75 +1,163 @@
-> main deatails about this product will be added later on
->
-> ---
->
->
-> | Release | Status | Release Date |
-> | ------- | ------ | ------------ |
-> | MVP     | ✅ DONE | 2024-06-10   |
->
+# Kontxt CLI Implementation Plan
 
-## Kontxt cli future development details
+## Summary
+Implement Plan 1’s feature and sequencing decisions, but place all major new capabilities in `src/core/extended/**` to keep existing core files stable and reduce churn.
 
----
+Chosen defaults:
+- AST engine: **Tree-sitter**
+- CLI strategy: **Minimal CLI changes first** (single entrypoint orchestrating extended modules)
 
-### 🏃‍♂️ Sprint 1: The CLI Wrapper & Core UX
+## Repository Structure and Ownership
+Keep existing modules:
+- `src/core/filter.ts` (base scan/read behavior, thin wrappers)
+- `src/core/write.ts` (base formatting/tree behavior, thin wrappers)
+- `src/core/types.ts` (shared types)
+- `src/cli/index.ts` (primary command wiring)
 
-**Goal:** Stop hardcoding the output to `.kontxt/summary.md`. Make the tool usable from the terminal using standard CLI flags.
+Add new modules under:
+- `src/core/extended/foundation/` (encoder singleton, concurrency, binary guard, ignore constants, cost)
+- `src/core/extended/skeleton/` (parser, queries, extractor, index)
+- `src/core/extended/budget/` (budget engine + output formatter)
+- `src/core/extended/security/` (pattern detect, entropy detect, redaction)
+- `src/core/extended/git/` (git helpers + diff context builder)
+- `src/core/extended/dx/` (`.kontxtignore`, interactive selection helpers)
 
-- **Task 1.1: Commander.js Wiring.** Hook up your existing `formatContext` and `formatTree` functions to a formal `kontxt export` command.
-- **Task 1.2: Implement `--copy` Flag.** Integrate `clipboardy`. If the user runs `kontxt export --copy`, bypass writing to a file entirely and dump the XML string straight to the system clipboard.
-- **Task 1.3: Implement `--output` Flag.** Allow users to specify where the file goes (e.g., `kontxt export --output ./my-context.md`).
-- **Task 1.4: Terminal Feedback.** Add `chalk` or standard console logs to give the user immediate feedback (e.g., `✅ Context successfully copied to clipboard!`).
+Rule: `src/cli/index.ts` calls orchestrators in `src/core/extended/*`; existing core files remain compatibility-friendly.
 
----
+## Phase Plan (Execution Order)
 
-### 🛡️ Sprint 2: Tokens, Economics, & Security
+### Phase 1: Foundation Fixes & Quick Wins (3-4 days)
+Implement in `src/core/extended/foundation/`:
+- `encoding.ts`: singleton `js-tiktoken` encoder (`cl100k_base`)
+- `concurrency.ts`: `p-limit` wrapper for bounded reads
+- `binary.ts`: null-byte detection from first 512 bytes
+- `constants.ts`: unified ignore sources (dirs/files/extensions + globby patterns)
+- `cost.ts`: model input cost estimator
 
-**Goal:** Make the tool safe to use in enterprise environments and transparent about LLM costs.
+Integrate into current flow:
+- `readOneFile` returns `ScanResult` (`file | skipped | error`)
+- `readAllFiles` uses bounded concurrency
+- CLI adds `--copy`, `--output`, and summary/cost display
 
-- **Task 2.1: Token Counting Engine.** Integrate `js-tiktoken`. Wrap it in a utility function that takes the final formatted string and returns the exact token count.
-- **Task 2.2: Cost Estimation Output.** When a command finishes, print a summary to the terminal. *Example: "Scanned 42 files. Total Tokens: ~124k. Est. Claude 3.5 Cost: $0.37"*
-*[ ] **Task 2.3: Basic Secret Redaction.** Write a middleware function that scans the final output string before it hits the clipboard/file. Use regex to find and replace common secrets (AWS keys starting with `AKIA`, Stripe keys starting with `sk_live`, and `.env` file contents) with `[REDACTED]`.
-- **Task 2.4: The `.kontxtignore` File.** Modify your file scanner to look for a `.kontxtignore` file in the root directory and merge those rules with your standard `.gitignore` parser.
+Public interfaces added:
+- `kontxt --copy`
+- `kontxt --output <path>`
 
----
+### Phase 2: Skeleton Mode with Tree-sitter (7-10 days)
+Implement in `src/core/extended/skeleton/`:
+- `parser.ts`: one-time init + grammar cache
+- `extractor.ts`: keep/strip traversal
+- `queries/typescript.ts`, `queries/javascript.ts`, `queries/python.ts`
+- `index.ts`: `skeletonize(file) => string | null`
 
-### 🎯 Sprint 3: Precision Targeting (Smart Filters)
+Build/runtime:
+- add grammar copy step to build
+- ensure grammar path resolution works in `dist`
 
-**Goal:** Developers rarely want the *entire* codebase. Give them the ability to slice exactly what they need.
+CLI flag:
+- `--skeleton` skeletonizes supported files, keeps unsupported raw
 
-- **Task 3.1: Glob Pattern Flags.** Add `--include` and `--exclude` flags using `micromatch` or `picomatch`. *(e.g., `kontxt export --include "src/**/*.ts" --exclude "**/*.test.ts"`)*.
-- **Task 3.2: Max File Size Limit.** Add a default skip for files over a certain size (e.g., > 500KB) to prevent accidental inclusion of massive generated JSON or log files. Add a `--max-size` flag to override it.
-- **Task 3.3: Configuration File Init.** Create a `kontxt init` command that generates a `.kontxtrc.json` or `.yml` file where users can save their preferred default ignore patterns and max file sizes.
+Public interfaces added:
+- `kontxt --skeleton`
 
----
+### Phase 3: Budget Mode (3-4 days, depends on Phase 2)
+Implement in `src/core/extended/budget/`:
+- `budget.ts`: small files full, large files skeleton, strict token cap
+- `formatBudgetContext` with explicit instruction block for follow-up asks
 
-### 🌿 Sprint 4: Git-Aware Context (The Killer Feature)
+CLI integration:
+- `--budget <tokens>`
+- show budget used + omitted counts
 
-**Goal:** Integrate Git so the AI context focuses on *what changed*, not just what exists.
+Public interfaces added:
+- `kontxt --budget <tokens>`
 
-- **Task 4.1: The `kontxt diff` Command.** Write a utility using `child_process.execSync` to run `git diff --name-only`. Pass those specific files to your engine to generate context *only* for uncommitted changes.
-- **Task 4.2: Branch Comparison Flag.** Add `--since <branch>` to `kontxt diff`. *(e.g., `kontxt diff --since main` grabs all files changed in the current feature branch).*
-- **Task 4.3: Diff Content Injection.** Instead of just exporting the full files that changed, optionally include the actual Git patch/diff output in a `<diff>` XML tag so the AI sees exactly what lines were altered.
+### Phase 4: Security and Secret Redaction (5-6 days, parallel-capable)
+Implement in `src/core/extended/security/`:
+- `patterns.ts`: regex secret families
+- `entropy.ts`: Shannon entropy with filters
+- `redact.ts`: regex-first then entropy pass, no double-redact
 
----
+Middleware position:
+- always before final output routing
+- bypass only with `--force`
 
-### ✨ Sprint 5: Interactive Polish & v1.0 Launch
+Public interfaces added:
+- `kontxt --force`
 
-**Goal:** Polish the developer experience, write the docs, and ship it to NPM.
+### Phase 5: Git Intelligence (5-6 days, depends on Phase 2)
+Implement in `src/core/extended/git/`:
+- `git.ts`: repo check, uncommitted file set, `--since` diff set
+- `git-context.ts`: full changed + skeleton others
 
-- **Task 5.1: Interactive UI.** Implement `kontxt export -i` (Interactive mode) using `@clack/prompts` or `inquirer`. Show a checkbox list of folders/files so the user can manually select what to include using the spacebar.
-- **Task 5.2: The README.** Write a professional README. Include: A 1-sentence hook, an installation command (`npm install -g kontxt-cli`), 3 common use cases (with terminal gifs if possible), and a list of flags.
-- **Task 5.3: NPM Publish.** Set up your `package.json` correctly (version bumping, defining the `bin` command, keywords). Run `npm publish`.
-- **Task 5.4: Launch.** Post it on GitHub, share it on Twitter/Reddit (r/LocalLLaMA, r/reactjs, r/typescript) with the angle: *"I got tired of copy-pasting code into ChatGPT, so I built a secure, token-aware CLI context builder."*
+CLI command:
+- `kontxt diff`
+- `kontxt diff --since <branch>`
 
----
+Public interfaces added:
+- `kontxt diff`
+- `kontxt diff --since <branch>`
 
-### 🔭 Future Horizons (Post v1.0 CLI)
+### Phase 6: DX, Config, Test, Ship (5-7 days)
+Implement in `src/core/extended/dx/`:
+- `.kontxtignore` loader + merge with base ignore
+- interactive selector (`@inquirer/prompts`)
 
-*Only look at these once Sprint 5 is completely done and published.*
+CLI additions:
+- `--interactive`
+- `kontxt init`
 
-- **GitHub Action:** Auto-update a `context.md` branch on PR merges.
-- **"Skeleton" Mode:** AST parsing to extract only function signatures and types for massive monorepos.
-- **AI API Integration:** Allow BYOK (Bring Your Own Key) so the CLI can summarize the codebase locally instead of requiring the user to paste it into a web browser.
+Finalize README, tests, publish metadata.
 
+## Public API/Interface Changes (Consolidated)
+Commands:
+- `kontxt` (default export)
+- `kontxt diff`
+- `kontxt init`
+
+Flags:
+- `--copy`
+- `--output <path>`
+- `--skeleton`
+- `--budget <tokens>`
+- `--force`
+- `--interactive`
+- `diff --since <branch>`
+
+## Test Cases and Acceptance Scenarios
+Foundation:
+- encoder instantiated once across many files
+- binary file skipped, no crash
+- per-file read failure returns `ScanResult.error`, run continues
+
+Skeleton:
+- TS/JS/Python fixtures strip bodies and keep declarations/imports
+- unsupported extension returns `null`, raw preserved
+- parse failure falls back cleanly
+
+Budget:
+- hard cap never exceeded
+- small-file-first behavior works
+- omitted file count and metadata correct
+
+Security:
+- known keys are redacted by default
+- entropy catches synthetic unknown secrets with bounded false positives
+- `--force` disables redaction and prints warning
+
+Git:
+- dirty working tree file detection
+- `--since main` changed-file detection
+- hybrid full/skeleton mapping correctness
+
+DX:
+- `.kontxtignore` patterns applied
+- interactive selection includes only chosen files
+- `init` creates template only when missing/with overwrite policy defined
+
+## Assumptions and Defaults
+- Runtime remains Node 18+ with current tsup pipeline.
+- Existing output format remains backward compatible unless explicitly versioned.
+- Tree-sitter grammars are packaged under `dist/grammars`.
+- Minimal CLI refactor is intentional in early phases; module split can be deferred to post-v1 cleanup.
+- Phase 4 may run in parallel, but integration into output pipeline is gated before release.
