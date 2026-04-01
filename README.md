@@ -1,5 +1,7 @@
 # Kontxt CLI Implementation Plan
 
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/Anastand/kontxt-cli?utm_source=oss&utm_medium=github&utm_campaign=Anastand%2Fkontxt-cli&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
+
 ## Summary
 Implement Plan 1’s feature and sequencing decisions, but place all major new capabilities in `src/core/extended/**` to keep existing core files stable and reduce churn.
 
