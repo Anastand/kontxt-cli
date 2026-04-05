@@ -1,9 +1,9 @@
-import { mkdir, writeFile, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readdir, writeFile } from "node:fs/promises";
+import { basename, join } from "node:path";
 import type { FileEntry, TreeNode } from "./types.js";
 
 export function buildTree(paths: string[]) {
-  let tree: TreeNode = {};
+  const tree: TreeNode = {};
   for (const path of paths) {
     let current = tree;
     const partOfPath = path.split("/");
@@ -30,7 +30,7 @@ export function renderTree(node: TreeNode, prefix: string = ""): string {
   keys.forEach((key, value) => {
     const isLast = value === keys.length - 1;
     const connector = isLast ? lastConnector : normalConnector;
-    const childPrefix = isLast ? prefix + "    " : prefix + "│   ";
+    const childPrefix = isLast ? `${prefix}    ` : `${prefix}│   `;
     const isFolder = node[key] != null;
     result +=
       prefix + connector + key + (isFolder ? folderPostfix : "") + newLine;
@@ -47,7 +47,7 @@ export function formatTree(paths: string[]): string {
 }
 
 export async function getDirStructure(directory: string) {
-  let dirStructure = [] as string[];
+  const dirStructure = [] as string[];
   const IGNORE_DIRS = new Set([
     "node_modules",
     ".git",
@@ -105,7 +105,7 @@ export async function getDirStructure(directory: string) {
     }
     const relativePath = entry.parentPath
       .replace(directory, "")
-      .concat("/" + entry.name)
+      .concat(`/${entry.name}`)
       .slice(1);
     dirStructure.push(relativePath);
   }
@@ -124,13 +124,43 @@ export function formatContext(files: FileEntry[], tree: string) {
 export async function createSummaryFile(
   basedir: string,
   content: string,
+  outputFileName?: string,
 ): Promise<void> {
-  const date = new Date();
-  const dateString = `${date.getDate()}-${date.getMonth() + 1}-${date.getFullYear()}`;
-  const fileName = `${dateString}-summary.md`;
+  const fileName = resolveSummaryFileName(outputFileName);
   const kontxtDir = join(basedir, ".kontxt");
   const kontxtSummaryFileName = join(kontxtDir, fileName);
 
   await mkdir(kontxtDir, { recursive: true });
   await writeFile(kontxtSummaryFileName, content);
+}
+
+function resolveSummaryFileName(outputFileName?: string): string {
+  if (!outputFileName) {
+    const date = new Date();
+    const dateString = `${date.getDate()}-${date.getMonth() + 1}-${date.getFullYear()}`;
+    return `${dateString}-summary.md`;
+  }
+
+  const trimmedName = outputFileName.trim();
+  if (!trimmedName) {
+    throw new Error("Invalid --output value: filename cannot be empty.");
+  }
+
+  if (trimmedName === "." || trimmedName === "..") {
+    throw new Error(
+      "Invalid --output value: filename must not be '.' or '..'.",
+    );
+  }
+
+  if (
+    trimmedName !== basename(trimmedName) ||
+    trimmedName.includes("/") ||
+    trimmedName.includes("\\")
+  ) {
+    throw new Error(
+      "Invalid --output value: only a filename is allowed (no path segments).",
+    );
+  }
+
+  return trimmedName;
 }

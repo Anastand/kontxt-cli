@@ -1,165 +1,100 @@
-# Kontxt CLI Implementation Plan
+# kontxt-cli
 
-![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/Anastand/kontxt-cli?utm_source=oss&utm_medium=github&utm_campaign=Anastand%2Fkontxt-cli&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
+`kontxt` is a CLI utility that packages a codebase into AI-ready context.
 
-## Summary
-Implement Plan 1’s feature and sequencing decisions, but place all major new capabilities in `src/core/extended/**` to keep existing core files stable and reduce churn.
+Current goal:
+- keep the existing legacy flow stable,
+- introduce `extended` architecture safely in phases,
+- avoid risky rewrite-in-place changes.
 
-Chosen defaults:
-- AST engine: **Tree-sitter**
-- CLI strategy: **Minimal CLI changes first** (single entrypoint orchestrating extended modules)
+## Current Behavior
 
-## Repository Structure and Ownership
-Keep existing modules:
-- `src/core/filter.ts` (base scan/read behavior, thin wrappers)
-- `src/core/write.ts` (base formatting/tree behavior, thin wrappers)
-- `src/core/types.ts` (shared types)
-- `src/cli/index.ts` (primary command wiring)
+### `kontxt`
+Prints a short utility message and exits.
 
-Add new modules under:
-- `src/core/extended/foundation/` (encoder singleton, concurrency, binary guard, ignore constants, cost)
-- `src/core/extended/skeleton/` (parser, queries, extractor, index)
-- `src/core/extended/budget/` (budget engine + output formatter)
-- `src/core/extended/security/` (pattern detect, entropy detect, redaction)
-- `src/core/extended/git/` (git helpers + diff context builder)
-- `src/core/extended/dx/` (`.kontxtignore`, interactive selection helpers)
+### `kontxt -o`
+Runs the legacy packaging flow and writes output with default dated naming:
+- `.kontxt/<DD-M-YYYY>-summary.md`
 
-Rule: `src/cli/index.ts` calls orchestrators in `src/core/extended/*`; existing core files remain compatibility-friendly.
+### `kontxt -o <name>`
+Runs the legacy packaging flow and writes output as:
+- `.kontxt/<name>`
 
-## Phase Plan (Execution Order)
+`<name>` must be a filename only (no path segments like `nested/file.md`).
 
-### Phase 1: Foundation Fixes & Quick Wins (3-4 days)
-Implement in `src/core/extended/foundation/`:
-- `encoding.ts`: singleton `js-tiktoken` encoder (`cl100k_base`)
-- `concurrency.ts`: `p-limit` wrapper for bounded reads
-- `binary.ts`: null-byte detection from first 512 bytes
-- `constants.ts`: unified ignore sources (dirs/files/extensions + globby patterns)
-- `cost.ts`: model input cost estimator
+## What the Legacy Flow Does
 
-Integrate into current flow:
-- `readOneFile` returns `ScanResult` (`file | skipped | error`)
-- `readAllFiles` uses bounded concurrency
-- CLI adds `--copy`, `--output`, and summary/cost display
+When generation runs (`kontxt -o` or `kontxt -o <name>`), it:
+1. Discovers files with ignore rules.
+2. Reads file contents.
+3. Counts tokens using `cl100k_base` via `js-tiktoken`.
+4. Builds a directory tree representation.
+5. Writes a summary file under `.kontxt/`.
 
-Public interfaces added:
-- `kontxt --copy`
-- `kontxt --output <path>`
+The output includes:
+- a `<tree>` block,
+- repeated `<file path="...">...</file>` blocks.
 
-### Phase 2: Skeleton Mode with Tree-sitter (7-10 days)
-Implement in `src/core/extended/skeleton/`:
-- `parser.ts`: one-time init + grammar cache
-- `extractor.ts`: keep/strip traversal
-- `queries/typescript.ts`, `queries/javascript.ts`, `queries/python.ts`
-- `index.ts`: `skeletonize(file) => string | null`
+## CLI Usage
 
-Build/runtime:
-- add grammar copy step to build
-- ensure grammar path resolution works in `dist`
+```bash
+# info only
+kontxt
 
-CLI flag:
-- `--skeleton` skeletonizes supported files, keeps unsupported raw
+# generate with default dated filename
+kontxt -o
 
-Public interfaces added:
-- `kontxt --skeleton`
+# generate with custom filename inside .kontxt/
+kontxt -o custom.md
 
-### Phase 3: Budget Mode (3-4 days, depends on Phase 2)
-Implement in `src/core/extended/budget/`:
-- `budget.ts`: small files full, large files skeleton, strict token cap
-- `formatBudgetContext` with explicit instruction block for follow-up asks
+# help
+kontxt --help
+```
 
-CLI integration:
-- `--budget <tokens>`
-- show budget used + omitted counts
+## Project Structure
 
-Public interfaces added:
-- `kontxt --budget <tokens>`
+Current stable modules:
+- `src/cli/index.ts` - CLI parsing and top-level execution routing
+- `src/core/filter.ts` - file discovery and reading
+- `src/core/write.ts` - formatting tree/context and writing summary
+- `src/core/types.ts` - shared types
 
-### Phase 4: Security and Secret Redaction (5-6 days, parallel-capable)
-Implement in `src/core/extended/security/`:
-- `patterns.ts`: regex secret families
-- `entropy.ts`: Shannon entropy with filters
-- `redact.ts`: regex-first then entropy pass, no double-redact
+Planned v2 modules will live under:
+- `src/core/extended/**`
 
-Middleware position:
-- always before final output routing
-- bypass only with `--force`
+This isolates new features from the legacy path.
 
-Public interfaces added:
-- `kontxt --force`
+## Extended Thinking Model (Design Intent)
 
-### Phase 5: Git Intelligence (5-6 days, depends on Phase 2)
-Implement in `src/core/extended/git/`:
-- `git.ts`: repo check, uncommitted file set, `--since` diff set
-- `git-context.ts`: full changed + skeleton others
+The `extended` path is treated as a deterministic pipeline:
+1. collect inputs
+2. discover files
+3. read safely
+4. transform (skeleton-first unless raw requested)
+5. secure (redact by default unless forced)
+6. assemble output
+7. deliver + report
 
-CLI command:
-- `kontxt diff`
-- `kontxt diff --since <branch>`
+Key principles:
+- no hidden side effects between stages,
+- clear input/output contracts per stage,
+- testable stage isolation,
+- legacy fallback remains available during transition.
 
-Public interfaces added:
-- `kontxt diff`
-- `kontxt diff --since <branch>`
+## Roadmap
 
-### Phase 6: DX, Config, Test, Ship (5-7 days)
-Implement in `src/core/extended/dx/`:
-- `.kontxtignore` loader + merge with base ignore
-- interactive selector (`@inquirer/prompts`)
+Detailed phased plan is tracked in:
+- [PHASES.md](./PHASES.md)
 
-CLI additions:
-- `--interactive`
-- `kontxt init`
+## Development
 
-Finalize README, tests, publish metadata.
+```bash
+bun run build
+bun run lint
+bun test
+```
 
-## Public API/Interface Changes (Consolidated)
-Commands:
-- `kontxt` (default export)
-- `kontxt diff`
-- `kontxt init`
-
-Flags:
-- `--copy`
-- `--output <path>`
-- `--skeleton`
-- `--budget <tokens>`
-- `--force`
-- `--interactive`
-- `diff --since <branch>`
-
-## Test Cases and Acceptance Scenarios
-Foundation:
-- encoder instantiated once across many files
-- binary file skipped, no crash
-- per-file read failure returns `ScanResult.error`, run continues
-
-Skeleton:
-- TS/JS/Python fixtures strip bodies and keep declarations/imports
-- unsupported extension returns `null`, raw preserved
-- parse failure falls back cleanly
-
-Budget:
-- hard cap never exceeded
-- small-file-first behavior works
-- omitted file count and metadata correct
-
-Security:
-- known keys are redacted by default
-- entropy catches synthetic unknown secrets with bounded false positives
-- `--force` disables redaction and prints warning
-
-Git:
-- dirty working tree file detection
-- `--since main` changed-file detection
-- hybrid full/skeleton mapping correctness
-
-DX:
-- `.kontxtignore` patterns applied
-- interactive selection includes only chosen files
-- `init` creates template only when missing/with overwrite policy defined
-
-## Assumptions and Defaults
-- Runtime remains Node 18+ with current tsup pipeline.
-- Existing output format remains backward compatible unless explicitly versioned.
-- Tree-sitter grammars are packaged under `dist/grammars`.
-- Minimal CLI refactor is intentional in early phases; module split can be deferred to post-v1 cleanup.
-- Phase 4 may run in parallel, but integration into output pipeline is gated before release.
+Notes:
+- build uses `tsup`,
+- lint/format use Biome,
+- tests are currently minimal and will expand during phase execution.
