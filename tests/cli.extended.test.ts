@@ -82,6 +82,22 @@ afterAll(async () => {
 });
 
 describe("extended cli behavior", () => {
+  test("kontxt -t prints tree only with no cost section", async () => {
+    const tempDir = await makeTempDir();
+    tempDirs.push(tempDir);
+    await writeFixtureFile(tempDir, "src/tree.ts", "export const tree = true;");
+
+    const result = await runNode([cliPath, "-t"], tempDir);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("Repository Tree");
+    expect(result.stdout).toContain("src/");
+    expect(result.stdout).toContain("tree.ts");
+    expect(result.stdout).not.toContain("Model cost estimates");
+    expect(result.stdout).not.toContain("Estimated Input Cost");
+    expect(existsSync(join(tempDir, ".kontxt"))).toBe(false);
+  });
+
   test("kontxt -e -o creates default dated summary file", async () => {
     const tempDir = await makeTempDir();
     tempDirs.push(tempDir);

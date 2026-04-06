@@ -65,16 +65,18 @@ export function formatContext(files: FileEntry[], tree: string): string {
   return [treeContent, ...convertedFiles].join("\n");
 }
 
+export function filterTreePaths(paths: string[]): string[] {
+  return paths.filter((path) => {
+    const extension = path.split(".").pop();
+    if (!extension || extension === path) {
+      return true;
+    }
+    return !NON_TREE_EXTENSIONS.has(extension);
+  });
+}
+
 export function getTreeInputPaths(files: FileEntry[]): string[] {
-  return files
-    .filter((file) => {
-      const extension = file.relativePath.split(".").pop();
-      if (!extension || extension === file.relativePath) {
-        return true;
-      }
-      return !NON_TREE_EXTENSIONS.has(extension);
-    })
-    .map((file) => file.relativePath);
+  return filterTreePaths(files.map((file) => file.relativePath));
 }
 
 export function buildSummaryContext(files: FileEntry[]): string {

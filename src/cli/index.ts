@@ -1,5 +1,10 @@
 import process from "node:process";
 import { Command } from "commander";
+import { discoverFiles } from "../core/extended/foundation/discovery.js";
+import {
+  filterTreePaths,
+  formatTree as formatExtendedTree,
+} from "../core/extended/foundation/tree-building.js";
 import { runExtendedPhaseOne } from "../core/extended/pipeline/index.js";
 import { readAllFiles } from "../core/filter.js";
 import {
@@ -18,6 +23,7 @@ type LegacyOptions = {
 type ParsedOptions = {
   output?: string | boolean;
   e?: boolean;
+  t?: boolean;
 };
 
 function formatCurrency(value: number): string {
@@ -161,11 +167,26 @@ async function runExtended(options: LegacyOptions): Promise<void> {
   }
 }
 
+async function runTreeOnly(): Promise<void> {
+  const cwd = process.cwd();
+  const discovered = await discoverFiles(cwd);
+  const treePaths = filterTreePaths(discovered);
+  const tree = formatExtendedTree(treePaths);
+
+  console.log("Repository Tree\n");
+  if (tree.length === 0) {
+    console.log("(no files found)");
+    return;
+  }
+  console.log(tree);
+}
+
 program
   .name("kontxt")
   .description("Package any codebase into AI-ready context")
   .version("0.0.1")
   .option("-e", "Run extended foundation pipeline")
+  .option("-t", "Print repository tree only in terminal")
   .option(
     "-o, --output [name]",
     "Generate summary in .kontxt/ (optional custom file name)",
@@ -179,6 +200,7 @@ function printUtilityInfo(): void {
     "Use `kontxt -o` for default output or `kontxt -o <name>` for custom output.",
   );
   console.log("Use `kontxt -e` to run the extended Phase 1 pipeline.");
+  console.log("Use `kontxt -t` to print only the repository tree.");
   console.log("Use `kontxt --help` to see all available options.");
 }
 
@@ -195,6 +217,11 @@ async function main(): Promise<void> {
     const normalizedOptions: LegacyOptions = {
       output: typeof options.output === "string" ? options.output : undefined,
     };
+
+    if (options.t) {
+      await runTreeOnly();
+      return;
+    }
 
     if (options.e) {
       await runExtended(normalizedOptions);
